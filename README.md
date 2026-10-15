@@ -122,36 +122,7 @@ GET	/api/pedidos/mis-compras	Historial del usuario autenticado
 GET	/api/csrf	Obtener token CSRF para acciones protegidas
 
 
-Formato de un pedido mixto (ejemplo ilustrativo)
-{
-  "cliente": {
-    "nombre": "Cliente",
-    "apellido": "Ejemplo",
-    "email": "ejemplo@correo.cl",
-    "direccion": "Calle de Prueba 123",
-    "comuna": "Santiago",
-    "region": "Región Metropolitana",
-    "metodoPago": "simulado"
-  },
-  "items": [
-    { "id": 1, "cantidad": 1, "tipo": "producto" },
-    { "id": 1, "cantidad": 1, "tipo": "plan" }
-  ]
-}
-No ejecutar esta solicitud contra la base del proyecto sin coordinar una prueba: si el servidor la acepta, registra un pedido y puede descontar stock. El JSON solo ilustra el formato de los ítems.
-7. Instalación y ejecución local
-Requisitos: JDK 21, conexión a internet, acceso autorizado a Neon y las seis tablas creadas.
-git clone https://github.com/johao-riquelme/backend-disquera.git
-cd backend-disquera\disquera-backend
-src/main/resources/application.properties usa estas variables:
-spring.datasource.url=${DB_URL}
-spring.datasource.username=${DB_USER}
-spring.datasource.password=${DB_PASSWORD}
-server.port=8081
-Se configuran en la misma terminal desde la que se ejecuta Spring Boot. Ejemplo de formato con marcadores (no contiene contraseñas válidas):
-$env:DB_URL = "jdbc:postgresql://TU_HOST_DE_NEON/neondb?sslmode=require"
-$env:DB_USER = "TU_USUARIO_DE_NEON"
-$env:DB_PASSWORD = "TU_CONTRASENA_ACTUAL"
+
 
 .\mvnw.cmd spring-boot:run
 Seguridad: nunca subir valores reales de esas variables, cadenas de conexión con contraseña, datos de clientes ni archivos .env privados a GitHub. La contraseña utilizada anteriormente durante el desarrollo fue compartida y debe restablecerse en Neon. Evitar pegar claves en comandos que queden guardados en el historial de PowerShell.
