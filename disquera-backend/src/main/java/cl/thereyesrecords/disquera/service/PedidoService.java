@@ -38,7 +38,6 @@ public class PedidoService {
             DetallePedidoRepository detallePedidoRepository,
             UsuarioRepository usuarioRepository,
             EntityManager entityManager) {
-
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
         this.usuarioRepository = usuarioRepository;
@@ -51,18 +50,13 @@ public class PedidoService {
                 SecurityContextHolder
                         .getContext()
                         .getAuthentication();
-
-        // Permitir compras de invitados
         if (autenticacion == null
                 || !autenticacion.isAuthenticated()
                 || "anonymousUser".equals(
                         autenticacion.getPrincipal())) {
-
             return null;
         }
-
         String correo = autenticacion.getName();
-
         Usuario usuario = usuarioRepository
                 .findByCorreoIgnoreCase(correo)
                 .orElseThrow(() ->
@@ -71,15 +65,12 @@ public class PedidoService {
                                 "La sesion del usuario no es valida"
                         )
                 );
-
         if (!Boolean.TRUE.equals(usuario.getActivo())) {
-
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "El usuario se encuentra desactivado"
             );
         }
-
         return usuario.getId();
     }
     @Transactional
@@ -95,9 +86,7 @@ public class PedidoService {
                     "El pedido debe incluir cliente y productos"
             );
         }
-
         PedidoRequest.Cliente cliente = solicitud.cliente();
-
         if (cliente.nombre() == null
                 || cliente.nombre().isBlank()
                 || cliente.apellido() == null
@@ -110,20 +99,15 @@ public class PedidoService {
                 || cliente.comuna().isBlank()
                 || cliente.region() == null
                 || cliente.region().isBlank()) {
-
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Faltan datos obligatorios del cliente"
             );
         }
-
         Long usuarioId = obtenerIdUsuarioAutenticado();
-
         Map<Long, Integer> cantidades =
                 new LinkedHashMap<>();
-
         try {
-
             for (PedidoRequest.Item item : solicitud.items()) {
 
                 if (item == null
@@ -131,44 +115,34 @@ public class PedidoService {
                         || item.id() <= 0
                         || item.cantidad() == null
                         || item.cantidad() <= 0) {
-
                     throw new ResponseStatusException(
                             HttpStatus.BAD_REQUEST,
                             "Los productos deben tener ID y cantidad validos"
                     );
                 }
-
                 cantidades.merge(
                         item.id(),
                         item.cantidad(),
                         Math::addExact
                 );
             }
-
         } catch (ArithmeticException ex) {
-
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "La cantidad solicitada es demasiado grande"
             );
         }
-
         long total = 0L;
-
         Map<Long, Producto> productos =
                 new LinkedHashMap<>();
-
         Map<Long, Long> subtotales =
                 new LinkedHashMap<>();
-
         List<Long> idsOrdenados = cantidades
                 .keySet()
                 .stream()
                 .sorted()
                 .toList();
-
         try {
-
             for (Long productoId : idsOrdenados) {
 
                 Producto producto = entityManager.find(
@@ -176,7 +150,6 @@ public class PedidoService {
                         productoId,
                         LockModeType.PESSIMISTIC_WRITE
                 );
-
                 if (producto == null
                         || !Boolean.TRUE.equals(
                                 producto.getActivo())) {
@@ -186,23 +159,18 @@ public class PedidoService {
                             "Producto no encontrado: " + productoId
                     );
                 }
-
                 int cantidad = cantidades.get(productoId);
-
                 int stockDisponible =
                         producto.getStock() == null
                                 ? 0
                                 : producto.getStock();
-
                 if (stockDisponible < cantidad) {
-
                     throw new ResponseStatusException(
                             HttpStatus.CONFLICT,
                             "Stock insuficiente para: "
                                     + producto.getNombre()
                     );
                 }
-
                 if (producto.getPrecio() == null
                         || producto.getPrecio() < 0) {
 
@@ -212,94 +180,70 @@ public class PedidoService {
                                     + producto.getNombre()
                     );
                 }
-
                 long subtotal = Math.multiplyExact(
                         producto.getPrecio().longValue(),
                         (long) cantidad
                 );
-
                 total = Math.addExact(total, subtotal);
-
                 productos.put(productoId, producto);
                 subtotales.put(productoId, subtotal);
             }
-
         } catch (ArithmeticException ex) {
-
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "El total del pedido excede el limite permitido"
             );
         }
-
         String nombreCompleto =
                 cliente.nombre().trim()
                         + " "
                         + cliente.apellido().trim();
-
         String correo = cliente.email()
                 .trim()
                 .toLowerCase();
-
         if (nombreCompleto.length() > 150
                 || correo.length() > 255) {
-
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Nombre o correo demasiado largo"
             );
         }
-
         String direccionCompleta =
                 cliente.direccion().trim()
                         + ", "
                         + cliente.comuna().trim()
                         + ", "
                         + cliente.region().trim();
-
         Pedido pedido = new Pedido();
-
         pedido.setUsuarioId(usuarioId);
-
         pedido.setNombreCliente(nombreCompleto);
         pedido.setCorreoCliente(correo);
         pedido.setDireccionEnvio(direccionCompleta);
         pedido.setTelefono(null);
-
         pedido.setTotal(total);
         pedido.setMedioPago("simulado");
         pedido.setEstado("aprobado_simulado");
-
         Pedido pedidoGuardado =
                 pedidoRepository.save(pedido);
-
         List<DetallePedido> detalles =
                 new ArrayList<>();
-
         for (Map.Entry<Long, Producto> entrada
                 : productos.entrySet()) {
-
             Long productoId = entrada.getKey();
             Producto producto = entrada.getValue();
-
             int cantidad = cantidades.get(productoId);
-
             DetallePedido detalle = new DetallePedido();
-
             detalle.setPedidoId(pedidoGuardado.getId());
             detalle.setProductoId(productoId);
             detalle.setCantidad(cantidad);
             detalle.setPrecioUnitario(producto.getPrecio());
             detalle.setSubtotal(subtotales.get(productoId));
-
             detalles.add(detalle);
-
             producto.setStock(
                     producto.getStock() - cantidad
             );
         }
         detallePedidoRepository.saveAll(detalles);
-
         return pedidoGuardado;
     }
 }

@@ -16,14 +16,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/usuarios")
 public class UsuarioController {
-
     private final UsuarioService usuarioService;
-
     public UsuarioController(UsuarioService usuarioService) {
         this.usuarioService = usuarioService;
     }
-
-    // Registrar un cliente nuevo
     @PostMapping("/registro")
     public ResponseEntity<Map<String, Object>> registrar(
             @Valid @RequestBody RegistroRequest datos) {
@@ -36,7 +32,6 @@ public class UsuarioController {
                 datos.telefono(),
                 datos.direccion()
         );
-
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 Map.of(
                         "id", usuario.getId(),

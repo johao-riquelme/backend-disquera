@@ -11,10 +11,6 @@ import java.util.List;
 @Repository
 public interface DetallePedidoRepository
         extends JpaRepository<DetallePedido, Long> {
-
-    // Obtener los productos de un pedido
     List<DetallePedido> findByPedidoId(Long pedidoId);
-
-    // Consultar los pedidos donde aparece un producto
     List<DetallePedido> findByProductoId(Long productoId);
 }

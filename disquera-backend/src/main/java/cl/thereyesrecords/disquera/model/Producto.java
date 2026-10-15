@@ -16,28 +16,20 @@ public class Producto {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
     @Column(nullable = false, length = 150)
     private String nombre;
-
     @Column(columnDefinition = "TEXT")
     private String descripcion;
-
     @Column(nullable = false, length = 30)
     private String categoria;
-
     @Column(nullable = false)
     private Integer precio;
-
     @Column(nullable = false)
     private Integer stock = 0;
-
     @Column(columnDefinition = "TEXT")
     private String imagen;
-
     @Column(nullable = false)
     private Boolean activo = true;
-
     @Column(name = "fecha_creacion", nullable = false)
     private OffsetDateTime fechaCreacion;
     public Producto() {

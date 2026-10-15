@@ -25,7 +25,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-
 @RestController
 @RequestMapping("/api/usuarios")
 public class AuthController {
@@ -47,7 +46,6 @@ public class AuthController {
     private Map<String, Object> datosDelUsuario(Usuario usuario) {
 
         Map<String, Object> respuesta = new LinkedHashMap<>();
-
         respuesta.put("id", usuario.getId());
         respuesta.put("nombre", usuario.getNombre());
 
@@ -57,30 +55,23 @@ public class AuthController {
                         ? usuario.getApellido()
                         : ""
         );
-
         respuesta.put("correo", usuario.getCorreo());
-
         respuesta.put(
                 "direccion",
                 usuario.getDireccion() != null
                         ? usuario.getDireccion()
                         : ""
         );
-
         respuesta.put(
                 "telefono",
                 usuario.getTelefono() != null
                         ? usuario.getTelefono()
                         : ""
         );
-
         respuesta.put("rol", usuario.getRol());
-
         respuesta.put("mensaje", "Sesion activa");
-
         return respuesta;
     }
-
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(
             @Valid @RequestBody LoginRequest datos,
@@ -104,7 +95,6 @@ public class AuthController {
                             "Correo o contraseña incorrectos"
                     ));
         }
-
         String rol = usuario.getRol()
                 .toUpperCase(Locale.ROOT);
 
@@ -122,20 +112,16 @@ public class AuthController {
         if (request.getSession(false) != null) {
             request.changeSessionId();
         }
-
         SecurityContext contexto =
                 SecurityContextHolder.createEmptyContext();
 
         contexto.setAuthentication(autenticacion);
-
         SecurityContextHolder.setContext(contexto);
-
         securityContextRepository.saveContext(
                 contexto,
                 request,
                 response
         );
-
         Map<String, Object> respuesta =
                 datosDelUsuario(usuario);
 
@@ -143,10 +129,8 @@ public class AuthController {
                 "mensaje",
                 "Credenciales correctas"
         );
-
         return ResponseEntity.ok(respuesta);
     }
-
     @GetMapping("/sesion")
     public ResponseEntity<Map<String, Object>> obtenerSesion(
             Authentication autenticacion) {
@@ -155,7 +139,6 @@ public class AuthController {
                 || !autenticacion.isAuthenticated()
                 || "anonymousUser".equals(
                         autenticacion.getPrincipal())) {
-
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of(
@@ -163,9 +146,7 @@ public class AuthController {
                             "No hay una sesion iniciada"
                     ));
         }
-
         String correo = autenticacion.getName();
-
         Usuario usuario = usuarioRepository
                 .findByCorreoIgnoreCase(correo)
                 .orElse(null);

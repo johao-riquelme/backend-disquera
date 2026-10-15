@@ -59,9 +59,7 @@ public class PedidoController {
             @Valid @RequestBody PedidoRequest solicitud) {
 
         Pedido pedido = pedidoService.crearPedido(solicitud);
-
         Map<String, Object> respuesta = new LinkedHashMap<>();
-
         respuesta.put("id", pedido.getId());
         respuesta.put("numeroPedido", pedido.getId());
         respuesta.put("total", pedido.getTotal());
@@ -71,12 +69,10 @@ public class PedidoController {
                 "mensaje",
                 "Compra simulada realizada correctamente"
         );
-
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(respuesta);
     }
-
     @GetMapping("/mis-compras")
     public ResponseEntity<List<Map<String, Object>>> misCompras(
             Authentication autenticacion) {
@@ -91,9 +87,7 @@ public class PedidoController {
                     "Debes iniciar sesion para ver tus compras"
             );
         }
-
         String correo = autenticacion.getName();
-
         Usuario usuario = usuarioRepository
                 .findByCorreoIgnoreCase(correo)
                 .orElseThrow(() ->
@@ -102,7 +96,6 @@ public class PedidoController {
                                 "La sesion no corresponde a un usuario valido"
                         )
                 );
-
         if (!Boolean.TRUE.equals(usuario.getActivo())) {
 
             throw new ResponseStatusException(
@@ -110,83 +103,65 @@ public class PedidoController {
                     "El usuario se encuentra desactivado"
             );
         }
-
         List<Pedido> pedidos = new ArrayList<>(
                 pedidoRepository.findByUsuarioId(usuario.getId())
         );
-
         pedidos.sort(
                 Comparator.comparing(
                         Pedido::getId
                 ).reversed()
         );
-
         List<Map<String, Object>> historial =
                 new ArrayList<>();
 
         for (Pedido pedido : pedidos) {
-
             Map<String, Object> compra =
                     new LinkedHashMap<>();
-
             compra.put("id", pedido.getId());
             compra.put("numeroPedido", pedido.getId());
             compra.put("fecha", pedido.getFechaPedido());
             compra.put("total", pedido.getTotal());
             compra.put("estado", pedido.getEstado());
             compra.put("medioPago", pedido.getMedioPago());
-
             compra.put(
                     "direccionEnvio",
                     pedido.getDireccionEnvio()
             );
-
             List<DetallePedido> detalles =
                     detallePedidoRepository
                             .findByPedidoId(pedido.getId());
-
             List<Map<String, Object>> productosComprados =
                     new ArrayList<>();
-
             for (DetallePedido detalle : detalles) {
-
                 String nombreProducto = productoRepository
                         .findById(detalle.getProductoId())
                         .map(Producto::getNombre)
                         .orElse("Producto no disponible");
-
                 Map<String, Object> producto =
                         new LinkedHashMap<>();
-
                 producto.put(
                         "productoId",
                         detalle.getProductoId()
                 );
-
                 producto.put(
                         "nombre",
                         nombreProducto
                 );
-
                 producto.put(
                         "cantidad",
                         detalle.getCantidad()
                 );
-
                 producto.put(
                         "precioUnitario",
                         detalle.getPrecioUnitario()
                 );
-
                 producto.put(
                         "subtotal",
                         detalle.getSubtotal()
                 );
-
                 productosComprados.add(producto);
             }
             compra.put("productos", productosComprados);
-
             historial.add(compra);
         }
         return ResponseEntity.ok(historial);

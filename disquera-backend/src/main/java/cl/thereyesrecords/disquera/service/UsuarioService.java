@@ -1,4 +1,3 @@
-
 package cl.thereyesrecords.disquera.service;
 
 import java.util.Locale;
@@ -13,18 +12,14 @@ import cl.thereyesrecords.disquera.repository.UsuarioRepository;
 
 @Service
 public class UsuarioService {
-
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
-
     public UsuarioService(
             UsuarioRepository usuarioRepository,
             PasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
     }
-
-    // Registrar un cliente nuevo
     public Usuario registrarCliente(
             String nombre,
             String apellido,
@@ -37,20 +32,17 @@ public class UsuarioService {
             apellido == null || apellido.isBlank() ||
             correo == null || correo.isBlank() ||
             contrasena == null || contrasena.isBlank()) {
-
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Completa los campos obligatorios"
             );
         }
-
         if (contrasena.length() < 8) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "La contraseña debe tener al menos 8 caracteres"
             );
         }
-
         String correoLimpio = correo.trim()
                 .toLowerCase(Locale.ROOT);
 
@@ -60,22 +52,17 @@ public class UsuarioService {
                 "El correo ya está registrado"
             );
         }
-
         Usuario usuario = new Usuario();
-
         usuario.setNombre(nombre.trim());
         usuario.setApellido(apellido.trim());
         usuario.setCorreo(correoLimpio);
 
-        // Guardar la contraseña protegida con BCrypt
         usuario.setPasswordHash(
             passwordEncoder.encode(contrasena)
         );
 
         usuario.setTelefono(telefono);
         usuario.setDireccion(direccion);
-
-        // Todos los registros públicos serán clientes
         usuario.setRol("cliente");
         usuario.setActivo(true);
 

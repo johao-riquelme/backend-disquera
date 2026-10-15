@@ -16,10 +16,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RestControllerAdvice
 public class PedidoErrorHandler {
 
-    // ==========================================
-    // ERRORES DE VALIDACION DEL FORMULARIO
-    // ==========================================
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> errorValidacion(
             MethodArgumentNotValidException ex) {
@@ -35,25 +31,17 @@ public class PedidoErrorHandler {
         if (detalle.isBlank()) {
             detalle = "Datos del pedido no validos";
         }
-
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("status", 400);
         respuesta.put("mensaje", "Error de validacion");
         respuesta.put("detalle", detalle);
-
         System.err.println(
                 "ERROR DE VALIDACION: " + detalle
         );
-
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(respuesta);
     }
-
-    // ==========================================
-    // ERRORES AL LEER EL JSON
-    // ==========================================
-
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> errorJson(
             HttpMessageNotReadableException ex) {
@@ -71,11 +59,6 @@ public class PedidoErrorHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .body(respuesta);
     }
-
-    // ==========================================
-    // ERRORES DEL SERVICIO DE COMPRAS
-    // ==========================================
-
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> errorServicio(
             ResponseStatusException ex) {
