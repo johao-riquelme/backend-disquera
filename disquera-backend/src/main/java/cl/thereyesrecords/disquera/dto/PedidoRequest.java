@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
@@ -18,11 +19,12 @@ public record PedidoRequest(
     @NotEmpty(message = "El carrito no puede estar vacio")
     @Valid
     List<Item> items,
+
     Long total
 
 ) {
-
     public record Cliente(
+
         @NotBlank(message = "El nombre es obligatorio")
         @Size(max = 100)
         String nombre,
@@ -43,12 +45,21 @@ public record PedidoRequest(
     ) {
     }
     public record Item(
-        @NotNull(message = "El ID del producto es obligatorio")
+        @NotNull(message = "El ID del articulo es obligatorio")
         @Positive(message = "El ID debe ser positivo")
         Long id,
         @NotNull(message = "La cantidad es obligatoria")
         @Positive(message = "La cantidad debe ser mayor a cero")
-        Integer cantidad
+        Integer cantidad,
+        @Pattern(
+            regexp = "(?i)(producto|plan)",
+            message = "El tipo debe ser producto o plan"
+        )
+        String tipo
     ) {
+        public Item(Long id, Integer cantidad) {
+            this(id, cantidad, null);
+        }
+
     }
 }
