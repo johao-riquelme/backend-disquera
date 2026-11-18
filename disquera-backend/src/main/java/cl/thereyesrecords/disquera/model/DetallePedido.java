@@ -12,6 +12,12 @@ public class DetallePedido {
     private Long pedidoId;
     @Column(name = "producto_id", nullable = false)
     private Long productoId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "pedido_id", insertable = false, updatable = false)
+    private Pedido pedido;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "producto_id", insertable = false, updatable = false)
+    private Producto producto;
     @Column(nullable = false)
     private Integer cantidad;
     @Column(name = "precio_unitario", nullable = false)

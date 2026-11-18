@@ -2,9 +2,12 @@ package cl.thereyesrecords.disquera.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -17,6 +20,12 @@ public class DetallePlanPedido {
     private Long pedidoId;
     @Column(name = "plan_id", nullable = false)
     private Long planId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "pedido_id", insertable = false, updatable = false)
+    private Pedido pedido;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "plan_id", insertable = false, updatable = false)
+    private Plan plan;
     @Column(nullable = false)
     private Integer cantidad;
     @Column(name = "precio_unitario", nullable = false)

@@ -23,7 +23,7 @@ public class Usuario {
     private String nombre;
     @Column(nullable = false, length = 100)
     private String apellido;
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, length = 255, unique = true)
     private String correo;
     @JsonIgnore
     @Column(name = "password_hash", nullable = false)

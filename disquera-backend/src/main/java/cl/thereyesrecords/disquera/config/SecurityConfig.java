@@ -43,6 +43,7 @@ public class SecurityConfig {
                 .ignoringRequestMatchers(
                     "/api/usuarios/registro",
                     "/api/usuarios/login",
+                    "/api/usuarios/google",
                     "/api/usuarios/logout",
                     "/api/pedidos"
                 )
@@ -67,6 +68,11 @@ public class SecurityConfig {
                 .requestMatchers(
                     HttpMethod.POST,
                     "/api/usuarios/login"
+                ).permitAll()
+                
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/usuarios/google"
                 ).permitAll()
 
                 .requestMatchers(

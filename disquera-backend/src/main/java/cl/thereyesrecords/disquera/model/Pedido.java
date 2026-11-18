@@ -10,6 +10,9 @@ public class Pedido {
     private Long id;
     @Column(name = "usuario_id")
     private Long usuarioId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_id", insertable = false, updatable = false)
+    private Usuario usuario;
     @Column(name = "nombre_cliente", nullable = false, length = 150)
     private String nombreCliente;
     @Column(name = "correo_cliente", nullable = false, length = 255)
