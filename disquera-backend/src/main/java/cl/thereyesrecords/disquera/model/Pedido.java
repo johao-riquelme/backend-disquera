@@ -103,4 +103,25 @@ public class Pedido {
     public void setFechaPedido(OffsetDateTime fechaPedido) {
         this.fechaPedido = fechaPedido;
     }
+    @Column(name = "token_ws", length = 100)
+    private String tokenWs;
+
+    @Column(name = "codigo_autorizacion", length = 30)
+    private String codigoAutorizacion;
+
+    public String getTokenWs() {
+        return tokenWs;
+    }
+
+    public void setTokenWs(String tokenWs) {
+        this.tokenWs = tokenWs;
+    }
+
+    public String getCodigoAutorizacion() {
+        return codigoAutorizacion;
+    }
+
+    public void setCodigoAutorizacion(String codigoAutorizacion) {
+        this.codigoAutorizacion = codigoAutorizacion;
+    }
 }

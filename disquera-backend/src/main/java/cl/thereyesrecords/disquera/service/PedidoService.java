@@ -60,6 +60,7 @@ public class PedidoService {
         this.usuarioRepository = usuarioRepository;
         this.entityManager = entityManager;
     }
+
     private Long obtenerIdUsuarioAutenticado() {
 
         Authentication autenticacion =
@@ -116,6 +117,7 @@ public class PedidoService {
 
         return tipo;
     }
+
     @Transactional
     public Pedido crearPedido(PedidoRequest solicitud) {
 
@@ -350,8 +352,14 @@ public class PedidoService {
         pedido.setDireccionEnvio(direccionCompleta);
         pedido.setTelefono(null);
         pedido.setTotal(total);
-        pedido.setMedioPago("simulado");
-        pedido.setEstado("aprobado_simulado");
+
+        String medioPago = (cliente.metodoPago() != null && cliente.metodoPago().equalsIgnoreCase("webpay"))
+                ? "webpay"
+                : "simulado";
+
+        pedido.setMedioPago(medioPago);
+        pedido.setEstado(medioPago.equals("webpay") ? "pendiente_pago" : "aprobado_simulado");
+
         Pedido pedidoGuardado =
                 pedidoRepository.save(pedido);
 
@@ -398,5 +406,21 @@ public class PedidoService {
             detallePlanPedidoRepository.saveAll(detallesPlanes);
         }
         return pedidoGuardado;
+    }
+
+    @Transactional
+    public void revertirStockPedido(Long pedidoId) {
+        List<DetallePedido> detalles = detallePedidoRepository.findByPedidoId(pedidoId);
+        for (DetallePedido detalle : detalles) {
+            Producto producto = entityManager.find(
+                    Producto.class,
+                    detalle.getProductoId(),
+                    LockModeType.PESSIMISTIC_WRITE
+            );
+            if (producto != null) {
+                int stockActual = producto.getStock() == null ? 0 : producto.getStock();
+                producto.setStock(stockActual + detalle.getCantidad());
+            }
+        }
     }
 }

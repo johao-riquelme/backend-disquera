@@ -2,7 +2,7 @@
 package cl.thereyesrecords.disquera.repository;
 
 import cl.thereyesrecords.disquera.model.Pedido;
-
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,4 +13,5 @@ public interface PedidoRepository extends JpaRepository<Pedido, Long> {
     List<Pedido> findByUsuarioId(Long usuarioId);
     List<Pedido> findByEstado(String estado);
     List<Pedido> findAllByOrderByFechaPedidoDesc();
+    Optional<Pedido> findByTokenWs(String tokenWs);
 }

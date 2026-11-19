@@ -45,7 +45,9 @@ public class SecurityConfig {
                     "/api/usuarios/login",
                     "/api/usuarios/google",
                     "/api/usuarios/logout",
-                    "/api/pedidos"
+                    "/api/pedidos",
+                    "/api/webpay/iniciar",
+                    "/api/webpay/confirmar"
                 )
             )
             .authorizeHttpRequests(auth -> auth
@@ -77,23 +79,18 @@ public class SecurityConfig {
 
                 .requestMatchers(
                     HttpMethod.POST,
-                    "/api/pedidos"
+                    "/api/pedidos",
+                    "/api/webpay/iniciar",
+                    "/api/webpay/confirmar"
                 ).permitAll()
 
                 .anyRequest().authenticated()
             )
-
-
             .logout(logout -> logout
-
                 .logoutUrl("/api/usuarios/logout")
-
                 .invalidateHttpSession(true)
-
                 .clearAuthentication(true)
-
                 .deleteCookies("JSESSIONID")
-
                 .logoutSuccessHandler(
                     (request, response, authentication) -> {
                         response.setStatus(200);
@@ -111,6 +108,7 @@ public class SecurityConfig {
             .formLogin(form -> form.disable());
         return http.build();
     }
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
@@ -142,6 +140,7 @@ public class SecurityConfig {
         );
         return source;
     }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
