@@ -23,6 +23,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import java.util.Objects;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -72,7 +74,8 @@ public class PedidoService {
                 || !autenticacion.isAuthenticated()
                 || "anonymousUser".equals(
                         autenticacion.getPrincipal())) {
-            return null;
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Debes iniciar sesion para realizar un pedido");
         }
 
         String correo = autenticacion.getName();
@@ -120,6 +123,20 @@ public class PedidoService {
 
     @Transactional
     public Pedido crearPedido(PedidoRequest solicitud) {
+        if (solicitud != null && solicitud.cliente() != null
+                && "webpay".equalsIgnoreCase(solicitud.cliente().metodoPago())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Para Webpay utiliza /api/webpay/iniciar");
+        }
+        return crearPedidoInterno(solicitud, false);
+    }
+
+    @Transactional
+    public Pedido crearPedidoWebpay(PedidoRequest solicitud) {
+        return crearPedidoInterno(solicitud, true);
+    }
+
+    private Pedido crearPedidoInterno(PedidoRequest solicitud, boolean webpay) {
 
         if (solicitud == null
                 || solicitud.cliente() == null
@@ -353,9 +370,11 @@ public class PedidoService {
         pedido.setTelefono(null);
         pedido.setTotal(total);
 
-        String medioPago = (cliente.metodoPago() != null && cliente.metodoPago().equalsIgnoreCase("webpay"))
-                ? "webpay"
-                : "simulado";
+        if (webpay && total <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El monto de Webpay debe ser mayor a cero");
+        }
+        String medioPago = webpay ? "webpay" : "simulado";
 
         pedido.setMedioPago(medioPago);
         pedido.setEstado(medioPago.equals("webpay") ? "pendiente_pago" : "aprobado_simulado");
@@ -408,9 +427,47 @@ public class PedidoService {
         return pedidoGuardado;
     }
 
+    // La confirmacion conserva el bloqueo hasta terminar su transaccion.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Pedido buscarPedidoWebpayBloqueado(String tokenWs) {
+        Long usuarioId = obtenerIdUsuarioAutenticado();
+        Pedido pedido = entityManager.createQuery(
+                "select p from Pedido p where p.tokenWs = :token", Pedido.class)
+                .setParameter("token", tokenWs)
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                .getResultList().stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Pedido no encontrado"));
+        if (!Objects.equals(usuarioId, pedido.getUsuarioId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "El pedido no pertenece al usuario autenticado");
+        }
+        if (!"webpay".equalsIgnoreCase(pedido.getMedioPago())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "El pedido no corresponde a Webpay");
+        }
+        return pedido;
+    }
+
+    // El estado y la devolucion de inventario se guardan atomicamente.
+    @Transactional
+    public void finalizarWebpayFallido(Long pedidoId, String estado) {
+        if (!List.of("error_webpay", "anulado_webpay", "rechazado_webpay").contains(estado)) {
+            throw new IllegalArgumentException("Estado de fallo invalido");
+        }
+        Pedido pedido = entityManager.find(Pedido.class, pedidoId,
+                LockModeType.PESSIMISTIC_WRITE);
+        if (pedido == null || !"pendiente_pago".equals(pedido.getEstado())) {
+            return;
+        }
+        pedido.setEstado(estado);
+        revertirStockPedido(pedidoId);
+    }
+
     @Transactional
     public void revertirStockPedido(Long pedidoId) {
-        List<DetallePedido> detalles = detallePedidoRepository.findByPedidoId(pedidoId);
+        List<DetallePedido> detalles = new ArrayList<>(detallePedidoRepository.findByPedidoId(pedidoId));
+        detalles.sort(Comparator.comparing(DetallePedido::getProductoId));
         for (DetallePedido detalle : detalles) {
             Producto producto = entityManager.find(
                     Producto.class,

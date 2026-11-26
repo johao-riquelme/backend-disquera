@@ -1,210 +1,332 @@
+
 package cl.thereyesrecords.disquera.controller;
 
 import cl.thereyesrecords.disquera.dto.PedidoRequest;
 import cl.thereyesrecords.disquera.model.Pedido;
 import cl.thereyesrecords.disquera.repository.PedidoRepository;
 import cl.thereyesrecords.disquera.service.PedidoService;
-
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/webpay")
+@SecurityRequirement(name = "bearerAuth")
 public class WebpayController {
 
     private final PedidoService pedidoService;
     private final PedidoRepository pedidoRepository;
     private final RestClient restClient;
+    private final String returnUrl;
 
-    @Value("${webpay.return-url}")
-    private String returnUrl;
+    public WebpayController(
+            PedidoService pedidoService,
+            PedidoRepository pedidoRepository,
+            @Value("${webpay.return-url}") String returnUrl,
+            @Value("${webpay.api-key-id}") String commerceCode,
+            @Value("${webpay.api-key-secret}") String apiKey) {
 
-    public WebpayController(PedidoService pedidoService, PedidoRepository pedidoRepository) {
         this.pedidoService = pedidoService;
         this.pedidoRepository = pedidoRepository;
+        this.returnUrl = returnUrl;
+
+        // Ambiente de integracion: no procesa cobros reales.
         this.restClient = RestClient.builder()
                 .baseUrl("https://webpay3gint.transbank.cl/rswebpaytransaction/api/webpay/v1.2/transactions")
-                .defaultHeader("Tbk-Api-Key-Id", "597055555532")
-                .defaultHeader("Tbk-Api-Key-Secret", "579B532A7440BB0C9079DED94D31EA1615BACEB56610332264630D42D0A36B1C")
+                .defaultHeader("Tbk-Api-Key-Id", commerceCode)
+                .defaultHeader("Tbk-Api-Key-Secret", apiKey)
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
 
-    @RequestMapping(path = "/iniciar", method = RequestMethod.POST)
-    public ResponseEntity<?> iniciarPago(@Valid @RequestBody PedidoRequest solicitud) {
-        Pedido pedido = pedidoService.crearPedido(solicitud);
+    @PostMapping("/iniciar")
+    public ResponseEntity<?> iniciarPago(
+            @Valid @RequestBody PedidoRequest solicitud) {
 
-        if (pedido.getTotal() == null || pedido.getTotal() <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El monto total debe ser mayor a cero");
-        }
+        Pedido pedido = pedidoService.crearPedidoWebpay(solicitud);
 
         try {
-            Map<String, Object> bodyTransbank = new LinkedHashMap<>();
-            bodyTransbank.put("buy_order", "TRR-" + pedido.getId());
-            bodyTransbank.put("session_id", "SES-" + pedido.getId() + "-" + System.currentTimeMillis());
-            bodyTransbank.put("amount", pedido.getTotal());
-            bodyTransbank.put("return_url", returnUrl);
+            Map<String, Object> body = new LinkedHashMap<>();
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = restClient.post()
-                    .body(bodyTransbank)
+            body.put("buy_order", "TRR-" + pedido.getId());
+            body.put("session_id", "SES-" + pedido.getId());
+            body.put("amount", pedido.getTotal());
+            body.put("return_url", returnUrl);
+
+            Map<?, ?> response = restClient.post()
+                    .body(body)
                     .retrieve()
                     .body(Map.class);
 
-            if (response == null || response.get("token") == null || response.get("url") == null) {
-                throw new RuntimeException("Respuesta invalida desde Transbank");
+            if (response == null
+                    || response.get("token") == null
+                    || response.get("url") == null) {
+
+                throw new IllegalStateException(
+                        "Respuesta incompleta de Webpay");
             }
 
             String token = response.get("token").toString();
-            String url = response.get("url").toString();
 
             pedido.setTokenWs(token);
             pedidoRepository.save(pedido);
 
-            Map<String, Object> resultado = new LinkedHashMap<>();
-            resultado.put("pedidoId", pedido.getId());
-            resultado.put("url", url);
-            resultado.put("token", token);
+            return ResponseEntity.ok(Map.of(
+                    "pedidoId", pedido.getId(),
+                    "url", response.get("url").toString(),
+                    "token", token
+            ));
 
-            return ResponseEntity.ok(resultado);
+        } catch (RuntimeException e) {
 
-        } catch (Exception e) {
-            pedido.setEstado("error_webpay");
-            pedidoRepository.save(pedido);
-            pedidoService.revertirStockPedido(pedido.getId());
+            pedidoService.finalizarWebpayFallido(
+                    pedido.getId(),
+                    "error_webpay"
+            );
+
             throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al iniciar transaccion con Transbank: " + e.getMessage()
+                    HttpStatus.BAD_GATEWAY,
+                    "No se pudo iniciar la transaccion con Webpay"
             );
         }
     }
 
-    @RequestMapping(path = "/confirmar", method = RequestMethod.POST)
-    public ResponseEntity<?> confirmarPago(@RequestBody Map<String, String> payload) {
-        String tokenWs = payload.get("token_ws");
+    // Bloqueo por pedido para evitar doble devolucion de stock.
+    @PostMapping("/confirmar")
+    @Transactional
+    public ResponseEntity<?> confirmarPago(
+            @RequestBody Map<String, String> payload) {
+
+        String token = payload.get("token_ws");
         String tbkToken = payload.get("TBK_TOKEN");
 
-        if ((tokenWs == null || tokenWs.isBlank()) && tbkToken != null && !tbkToken.isBlank()) {
-            pedidoRepository.findByTokenWs(tbkToken).ifPresent(pedido -> {
-                if ("pendiente_pago".equals(pedido.getEstado())) {
-                    pedido.setEstado("anulado_webpay");
-                    pedidoRepository.save(pedido);
-                    pedidoService.revertirStockPedido(pedido.getId());
-                }
-            });
+        boolean cancelacion =
+                (token == null || token.isBlank())
+                && tbkToken != null
+                && !tbkToken.isBlank();
 
-            Map<String, Object> anulado = new LinkedHashMap<>();
-            anulado.put("aprobado", false);
-            anulado.put("estado", "anulado");
-            anulado.put("mensaje", "El pago fue anulado por el usuario en Webpay.");
-            return ResponseEntity.ok(anulado);
+        if (cancelacion) {
+            token = tbkToken;
         }
 
-        if (tokenWs == null || tokenWs.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el parametro token_ws");
+        if (token == null || token.isBlank()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Falta el token de Webpay"
+            );
         }
 
-        Pedido pedido = pedidoRepository.findByTokenWs(tokenWs)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido no encontrado para el token"));
+        // Verifica propietario y bloquea el pedido.
+        Pedido pedido = pedidoService.buscarPedidoWebpayBloqueado(token);
 
+        // Evita procesar nuevamente un pago aprobado.
         if ("pagado_webpay".equals(pedido.getEstado())) {
-            Map<String, Object> yaPagado = new LinkedHashMap<>();
-            yaPagado.put("aprobado", true);
-            yaPagado.put("idOrden", pedido.getId());
-            yaPagado.put("total", pedido.getTotal());
-            yaPagado.put("estado", pedido.getEstado());
-            yaPagado.put("medioPago", "Webpay Plus");
-            yaPagado.put("codigoAutorizacion", pedido.getCodigoAutorizacion());
-            return ResponseEntity.ok(yaPagado);
+            return respuestaAprobada(pedido);
+        }
+
+        // Evita devolver el stock mas de una vez.
+        if (!"pendiente_pago".equals(pedido.getEstado())) {
+            return respuestaNoAprobada(pedido);
+        }
+
+        Map<?, ?> resultado;
+        boolean abortadoTransbank = false;
+
+        try {
+
+            resultado = cancelacion
+                    ? consultarEstado(token)
+                    : restClient.put()
+                            .uri("/{token}", token)
+                            .retrieve()
+                            .body(Map.class);
+
+        } catch (RestClientException ex) {
+
+            // Detecta una transaccion abortada por Transbank.
+            if (ex instanceof RestClientResponseException respuesta) {
+
+                abortadoTransbank =
+                        respuesta.getStatusCode().value() == 422
+                        && respuesta.getResponseBodyAsString().contains(
+                            "Transaction has an invalid finished state: aborted"
+                        );
+            }
+
+            // Consulta el estado antes de modificar el pedido.
+            try {
+
+                resultado = consultarEstado(token);
+
+            } catch (RestClientException fallo) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "No se pudo verificar el estado del pago"
+                );
+            }
+        }
+
+        // Valida que la orden y el monto coincidan.
+        if (resultado == null
+                || !coincidePedido(resultado, pedido)) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "No se pudo verificar la orden y el monto del pago"
+            );
+        }
+
+        String status = String.valueOf(resultado.get("status"));
+
+        int code = resultado.get("response_code") instanceof Number n
+                ? n.intValue()
+                : -1;
+
+        // Pago aprobado por Transbank.
+        if ("AUTHORIZED".equals(status) && code == 0) {
+
+            Object codigo = resultado.get("authorization_code");
+
+            pedido.setCodigoAutorizacion(
+                    codigo == null ? "" : codigo.toString()
+            );
+
+            pedido.setEstado("pagado_webpay");
+
+            pedidoRepository.save(pedido);
+
+            return respuestaAprobada(pedido);
+        }
+
+        // Pago rechazado o reversado.
+        if ("FAILED".equals(status)
+                || "REVERSED".equals(status)) {
+
+            pedidoService.finalizarWebpayFallido(
+                    pedido.getId(),
+                    cancelacion
+                            ? "anulado_webpay"
+                            : "rechazado_webpay"
+            );
+
+            return respuestaNoAprobada(pedido);
+        }
+
+        // Transaccion abortada confirmada por Transbank.
+        if (abortadoTransbank && "INITIALIZED".equals(status)) {
+
+            pedidoService.finalizarWebpayFallido(
+                    pedido.getId(),
+                    "anulado_webpay"
+            );
+
+            return respuestaNoAprobada(pedido);
+        }
+
+        // No devolver stock ante estados ambiguos.
+        throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "El pago no tiene un resultado definitivo; consulta nuevamente su estado"
+        );
+    }
+
+    // Consulta el estado directamente en Transbank.
+    private Map<?, ?> consultarEstado(String token) {
+
+        return restClient.get()
+                .uri("/{token}", token)
+                .retrieve()
+                .body(Map.class);
+    }
+
+    // Verifica que el monto y la orden sean correctos.
+    private boolean coincidePedido(
+            Map<?, ?> resultado,
+            Pedido pedido) {
+
+        if (!("TRR-" + pedido.getId()).equals(
+                resultado.get("buy_order"))) {
+
+            return false;
+        }
+
+        Object monto = resultado.get("amount");
+
+        if (monto == null || pedido.getTotal() == null) {
+            return false;
         }
 
         try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> commitResponse = restClient.put()
-                    .uri("/{token}", tokenWs)
-                    .retrieve()
-                    .body(Map.class);
 
-            String status = commitResponse != null && commitResponse.get("status") != null
-                    ? commitResponse.get("status").toString()
-                    : "";
-            int responseCode = commitResponse != null && commitResponse.get("response_code") instanceof Number num
-                    ? num.intValue()
-                    : -1;
+            return new BigDecimal(monto.toString())
+                    .compareTo(
+                            new BigDecimal(
+                                    pedido.getTotal().toString()
+                            )
+                    ) == 0;
 
-            boolean esAprobado = "AUTHORIZED".equalsIgnoreCase(status) && responseCode == 0;
+        } catch (NumberFormatException ex) {
 
-            if (esAprobado) {
-                String authCode = commitResponse.get("authorization_code") != null
-                        ? commitResponse.get("authorization_code").toString()
-                        : "";
-
-                pedido.setEstado("pagado_webpay");
-                pedido.setCodigoAutorizacion(authCode);
-                pedidoRepository.save(pedido);
-
-                Map<String, Object> aprobado = new LinkedHashMap<>();
-                aprobado.put("aprobado", true);
-                aprobado.put("idOrden", pedido.getId());
-                aprobado.put("total", pedido.getTotal());
-                aprobado.put("estado", pedido.getEstado());
-                aprobado.put("medioPago", "Webpay Plus");
-                aprobado.put("codigoAutorizacion", authCode);
-                return ResponseEntity.ok(aprobado);
-            } else {
-                pedido.setEstado("rechazado_webpay");
-                pedidoRepository.save(pedido);
-                pedidoService.revertirStockPedido(pedido.getId());
-
-                Map<String, Object> rechazado = new LinkedHashMap<>();
-                rechazado.put("aprobado", false);
-                rechazado.put("estado", "rechazado");
-                rechazado.put("mensaje", "La transaccion fue rechazada por el banco o emisor.");
-                return ResponseEntity.ok(rechazado);
-            }
-
-        } catch (Exception e) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al confirmar transaccion con Transbank: " + e.getMessage()
-            );
+            return false;
         }
     }
 
-    @RequestMapping(path = "/simular-aprobacion", method = RequestMethod.POST)
-    public ResponseEntity<?> simularAprobacion(@RequestBody Map<String, String> payload) {
-        String tokenWs = payload.get("token_ws");
-        if (tokenWs == null || tokenWs.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Falta el parametro token_ws");
-        }
+    // Respuesta para un pago aprobado.
+    private ResponseEntity<?> respuestaAprobada(Pedido pedido) {
 
-        Pedido pedido = pedidoRepository.findByTokenWs(tokenWs)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido no encontrado para el token"));
+        Map<String, Object> respuesta = new LinkedHashMap<>();
 
-        String authCode = String.valueOf((int) (Math.random() * 900000) + 100000);
-        pedido.setEstado("pagado_webpay");
-        pedido.setCodigoAutorizacion(authCode);
-        pedidoRepository.save(pedido);
+        respuesta.put("aprobado", true);
+        respuesta.put("idOrden", pedido.getId());
+        respuesta.put("total", pedido.getTotal());
+        respuesta.put("estado", pedido.getEstado());
+        respuesta.put("medioPago", "Webpay Plus");
+        respuesta.put(
+                "codigoAutorizacion",
+                pedido.getCodigoAutorizacion()
+        );
 
-        Map<String, Object> aprobado = new LinkedHashMap<>();
-        aprobado.put("aprobado", true);
-        aprobado.put("idOrden", pedido.getId());
-        aprobado.put("total", pedido.getTotal());
-        aprobado.put("estado", "pagado_webpay");
-        aprobado.put("medioPago", "Webpay Plus (Simulado)");
-        aprobado.put("codigoAutorizacion", authCode);
-        return ResponseEntity.ok(aprobado);
+        return ResponseEntity.ok(respuesta);
+    }
+
+    // Respuesta para un pago rechazado o anulado.
+    private ResponseEntity<?> respuestaNoAprobada(Pedido pedido) {
+
+        boolean anulado =
+                "anulado_webpay".equals(pedido.getEstado());
+
+        return ResponseEntity.ok(Map.of(
+                "aprobado", false,
+                "estado", anulado ? "anulado" : "rechazado",
+                "mensaje", anulado
+                        ? "El pago fue anulado"
+                        : "El pago no fue aprobado"
+        ));
+    }
+
+    // Impide aprobar pagos manualmente sin Transbank.
+    @PostMapping("/simular-aprobacion")
+    public ResponseEntity<?> simularAprobacion(
+            @RequestBody Map<String, String> payload) {
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "La aprobacion manual de Webpay esta deshabilitada"
+        );
     }
 }

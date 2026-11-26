@@ -19,6 +19,7 @@ import cl.thereyesrecords.disquera.repository.UsuarioRepository;
 import cl.thereyesrecords.disquera.service.PedidoService;
 
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
+@SecurityRequirement(name = "bearerAuth")
 @RequestMapping("/api/pedidos")
 public class PedidoController {
 

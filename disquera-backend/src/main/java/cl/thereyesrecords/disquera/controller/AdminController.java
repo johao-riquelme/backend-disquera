@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @RestController
+@SecurityRequirement(name = "bearerAuth")
 @RequestMapping("/api/admin")
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class AdminController {
@@ -75,7 +78,8 @@ public class AdminController {
 
         List resultado = new ArrayList<>();
         for (Pedido p : pedidos) {
-            if ("pendiente".equalsIgnoreCase(p.getEstado())) {
+            if ("pendiente".equalsIgnoreCase(p.getEstado())
+                    || "pendiente_pago".equalsIgnoreCase(p.getEstado())) {
                 resultado.add(construirDetallePedido(p));
             }
         }

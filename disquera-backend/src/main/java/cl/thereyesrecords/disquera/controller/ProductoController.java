@@ -1,5 +1,7 @@
 package cl.thereyesrecords.disquera.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import java.util.List;
 import java.util.Map;
 
@@ -60,6 +62,7 @@ public class ProductoController {
         }
         return producto;
     }
+    @SecurityRequirement(name = "bearerAuth")
     @PostMapping
     public ResponseEntity<Producto> crear(
             @RequestBody Producto producto,
@@ -72,6 +75,7 @@ public class ProductoController {
                 .status(HttpStatus.CREATED)
                 .body(nuevoProducto);
     }
+    @SecurityRequirement(name = "bearerAuth")
     @PutMapping("/{id}")
     public ResponseEntity<Producto> actualizar(
             @PathVariable Long id,
@@ -83,6 +87,7 @@ public class ProductoController {
                 productoService.actualizar(id, datos);
         return ResponseEntity.ok(productoActualizado);
     }
+    @SecurityRequirement(name = "bearerAuth")
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> desactivar(
             @PathVariable Long id,

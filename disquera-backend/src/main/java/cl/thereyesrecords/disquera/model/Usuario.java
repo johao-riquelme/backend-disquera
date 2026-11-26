@@ -1,4 +1,3 @@
-
 package cl.thereyesrecords.disquera.model;
 
 import java.time.OffsetDateTime;
@@ -25,6 +24,9 @@ public class Usuario {
     private String apellido;
     @Column(nullable = false, length = 255, unique = true)
     private String correo;
+    @JsonIgnore
+    @Column(name = "google_sub", length = 255, unique = true)
+    private String googleSub;
     @JsonIgnore
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
@@ -76,6 +78,12 @@ public class Usuario {
     }
     public void setCorreo(String correo) {
         this.correo = correo;
+    }
+    public String getGoogleSub() {
+        return googleSub;
+    }
+    public void setGoogleSub(String googleSub) {
+        this.googleSub = googleSub;
     }
     public String getPasswordHash() {
         return passwordHash;
